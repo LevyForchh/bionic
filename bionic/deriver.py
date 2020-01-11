@@ -35,6 +35,7 @@ class EntityDeriver(object):
         self._is_ready_for_bootstrap_resolution = False
         self._task_lists_by_entity_name = None
         self._task_states_by_key = None
+        self._doc_by_entity_name = {}
 
         # This state allows us to do full resolution for external callers.
         self._is_ready_for_full_resolution = False
@@ -56,7 +57,7 @@ class EntityDeriver(object):
         self.get_ready()
         return self._compute_result_group_for_entity_name(entity_name)
 
-    def export_dag(self, include_core=False):
+    def export_dag(self,  include_core=False):
         '''
         Constructs a NetworkX graph corresponding to the DAG of tasks.  There
         is one node per task key -- i.e., for each artifact that can be created
@@ -104,6 +105,7 @@ class EntityDeriver(object):
                     entity_name=entity_name,
                     case_key=task_key.case_key,
                     task_ix=task_ix,
+                    doc=self._doc_by_entity_name.get(entity_name),
                 )
 
                 for child_state in state.children:
@@ -192,7 +194,6 @@ class EntityDeriver(object):
     def _populate_entity_info(self, entity_name):
         if entity_name in self._task_lists_by_entity_name:
             return
-
         provider = self._flow_state.get_provider(entity_name)
 
         dep_names = provider.get_dependency_names()
@@ -218,6 +219,10 @@ class EntityDeriver(object):
         self._task_lists_by_entity_name[entity_name] = provider.get_tasks(
             dep_key_spaces_by_name,
             dep_task_key_lists_by_name)
+
+        ds = provider.doc_for_name(entity_name)
+        if ds:
+            self._doc_by_entity_name[entity_name] = ds
 
     def _bootstrap_singleton(self, entity_name):
         result_group = self._compute_result_group_for_entity_name(

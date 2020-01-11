@@ -140,6 +140,10 @@ flow = builder.build()
 # Compute and print the precision-recall dataframe.
 if __name__ == '__main__':
     bn.util.init_basic_logging()
+    # Show flow diagram
+    flow.render_dag().show()
+    flow.render_dag().save(fp='ml_workflow.svg')
+    flow.render_dag().save(fp='ml_workflow.png')
 
     import argparse
     parser = argparse.ArgumentParser(

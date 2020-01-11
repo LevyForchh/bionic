@@ -4,14 +4,51 @@ pull in several optional dependencies as well.  The external Graphviz library
 is also required.
 """
 
+import warnings
+from pathlib import Path
 from collections import defaultdict
-from io import BytesIO
+from io import BytesIO, IOBase
 
-from .optdep import import_optional_dependency
+from .optdep import import_optional_dependency, oneline
 module_purpose = 'rendering the flow DAG'
 hsluv = import_optional_dependency('hsluv', purpose=module_purpose)
 pydot = import_optional_dependency('pydot', purpose=module_purpose)
 Image = import_optional_dependency('PIL.Image', purpose=module_purpose)
+
+
+class FlowImage:
+    def __init__(self, pydot_graph):
+        '''
+        Given a pydot graph object, create Pillow Image or SVG represented as XML text.
+        '''
+        self.pil_image = Image.open(BytesIO(pydot_graph.create_png()))
+        self.xml_text = pydot_graph.create_svg()
+
+    def save(self, fp, format=None, **params):
+        '''Save flow visualization under the given filename. For SVG, must pass a filepath and does not
+        support file objects. For formats supported by PIL, pass a filename, path or file object,
+        and optionally specify format, else infer from filename extension. Pass additonal keyword
+        options supported by PIL using params.'''
+        if isinstance(fp, IOBase):
+            # write to file object using PIL interface
+            self.pil_image.save(fp, format, **params)
+        else:
+            if Path(fp).suffix == '.svg':
+                if format or params:
+                    warnings.warn(oneline('''Optional args ``format`` and ``params`` passed to FlowImage.save() are
+                       not supported for SVG.'''))
+                with open(fp, 'wb') as file:
+                    file.write(self.xml_text)
+            else:
+                self.pil_image.save(fp, format, **params)
+
+    def show(self):
+        '''Show image using PIL'''
+        self.pil_image.show()
+
+    def _repr_svg_(self):
+        '''Rich display image as SVG in IPython notebook or Qt console.'''
+        return str(self.xml_text)
 
 
 def hpluv_color_dict(keys, saturation, lightness):
@@ -57,6 +94,10 @@ def dot_from_graph(graph, vertical=False, curvy_lines=False):
     def name_from_node(node):
         return graph.nodes[node]['name']
 
+    def doc_from_node(node):
+        doc = graph.nodes[node]['doc']
+        return doc if doc else ""
+
     for cluster, node_list in node_lists_by_cluster.items():
         sorted_nodes = list(sorted(
             node_list, key=lambda node: graph.nodes[node]['task_ix']))
@@ -67,6 +108,7 @@ def dot_from_graph(graph, vertical=False, curvy_lines=False):
             entity_name = graph.nodes[node]['entity_name']
             subdot.add_node(pydot.Node(
                 name_from_node(node),
+                tooltip=doc_from_node(node),
                 style='filled',
                 fillcolor=color_strs_by_entity_name[entity_name],
                 shape='box',
@@ -84,10 +126,3 @@ def dot_from_graph(graph, vertical=False, curvy_lines=False):
             ))
 
     return dot
-
-
-def image_from_dot(dot):
-    '''
-    Given a pydot graph object, renders it into a Pillow Image.
-    '''
-    return Image.open(BytesIO(dot.create_png()))
